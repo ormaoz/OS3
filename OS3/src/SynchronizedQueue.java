@@ -7,7 +7,7 @@ public class SynchronizedQueue<T> {
 
 	private T[] buffer;
 	private int producers;
-	
+	123
 	// TODO: Add more private members here as necessary
 	
 	/**
