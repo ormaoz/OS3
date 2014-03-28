@@ -1,14 +1,21 @@
+import java.util.concurrent.Semaphore;
+
+
 /**
  * A synchronized bounded-size queue for multithreaded producer-consumer applications.
  * 
  * @param <T> Type of data items
+ * @author ID: 029983111, ID: 038064556
  */
 public class SynchronizedQueue<T> {
 
 	private T[] buffer;
 	private int producers;
-	
-	// TODO: Add more private members here as necessary
+	private int headOfQueue;
+	private int tailOfQueue;
+	private int size;
+	private Semaphore addProducer;
+	private Semaphore reduceProducer;
 	
 	/**
 	 * Constructor. Allocates a buffer (an array) with the given capacity and
@@ -19,7 +26,18 @@ public class SynchronizedQueue<T> {
 	public SynchronizedQueue(int capacity) {
 		this.buffer = (T[])(new Object[capacity]);
 		this.producers = 0;
-		// TODO: Add more logic here as necessary
+		
+		// indexes to the head and tail of the queue
+		this.headOfQueue = 0;
+		this.tailOfQueue = capacity;
+		
+		// Count the number of items in the queue
+		this.size = 0;
+		
+		// Semaphores for critical sections
+		addProducer = new Semaphore(1, true);
+		reduceProducer = new Semaphore(1, true);
+		
 	}
 	
 	/**
@@ -33,8 +51,31 @@ public class SynchronizedQueue<T> {
 	 * @see #registerProducer()
 	 * @see #unregisterProducer()
 	 */
-	public T dequeue() {
-
+	public synchronized T dequeue() {
+		
+		// As long as the queue is empty, prevent dequeue items.
+		while (size == 0) {
+			if (producers == 0) {
+				return null;
+			} else {
+				try {
+					this.wait();
+				} catch (InterruptedException e) {
+					System.err.println(e);
+				}
+			}
+		}
+		this.notifyAll();
+		
+		// Save the current item in the head of the queue
+		T currentHead = buffer[headOfQueue];
+		buffer[headOfQueue] = null; // Help the garbage collector
+		
+		// advance the head of the queue index to the next one. 
+		// If reached the end of the queue, will be back to start.
+		headOfQueue = (headOfQueue + 1) % buffer.length;
+		size--;
+		return currentHead;
 	}
 
 	/**
@@ -43,8 +84,21 @@ public class SynchronizedQueue<T> {
 	 * 
 	 * @param item Item to enqueue
 	 */
-	public void enqueue(T item) {
-
+	public synchronized void enqueue(T item) {
+		
+		// As long as the queue is full, prevent enqueue item into it.
+		while (size == buffer.length) {
+			try {
+				this.wait();
+			} catch (InterruptedException e) {
+				System.err.println(e);
+			}
+		}
+		this.notifyAll();
+		
+		tailOfQueue = (tailOfQueue + 1) % buffer.length;
+		buffer[tailOfQueue] = item;
+		size++;
 	}
 
 	/**
@@ -52,7 +106,7 @@ public class SynchronizedQueue<T> {
 	 * @return queue capacity
 	 */
 	public int getCapacity() {
-
+		return buffer.length;
 	}
 
 	/**
@@ -60,7 +114,7 @@ public class SynchronizedQueue<T> {
 	 * @return queue size
 	 */
 	public int getSize() {
-
+		return size;
 	}
 	
 	/**
@@ -77,8 +131,13 @@ public class SynchronizedQueue<T> {
 	 * @see #unregisterProducer()
 	 */
 	public void registerProducer() {
-		// TODO: This should be in a critical section
+		addProducer.acquireUninterruptibly();
+		
+		// Critical section
 		this.producers++;
+		// End of critical section
+		
+		addProducer.release();
 	}
 
 	/**
@@ -88,7 +147,13 @@ public class SynchronizedQueue<T> {
 	 * @see #registerProducer()
 	 */
 	public void unregisterProducer() {
-		// TODO: This should be in a critical section
+		reduceProducer.acquireUninterruptibly();
+		
+		// Critical section
 		this.producers--;
+		// End of critical section
+		
+		reduceProducer.release();
+
 	}
 }
